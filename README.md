@@ -1,6 +1,8 @@
 # Clash-SpeedTest
 go run youtube-check.go -c "https://your-subscription-url" 
+
 youtube-check.exe -c "https://your-subscription-url" 
+
 即可检测 Youtube 情况
 
 基于 Clash/Mihomo 核心的测速工具，快速测试你的节点速度和流媒体解锁情况。
