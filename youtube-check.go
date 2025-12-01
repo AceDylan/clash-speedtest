@@ -7,7 +7,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/faceair/clash-speedtest/speedtester"
@@ -113,6 +115,7 @@ func main() {
 	for _, result := range results {
 		statusStr := result.Status
 		regionStr := result.Region
+		noteStr := ""
 
 		if result.Status == "Success" {
 			statusStr = colorGreen + "✓ 解锁" + colorReset
@@ -122,8 +125,9 @@ func main() {
 			successCount++
 		} else {
 			statusStr = colorRed + "✗ 失败" + colorReset
+			regionStr = colorRed + "N/A" + colorReset
 			if result.Info != "" {
-				regionStr = colorRed + result.Info + colorReset
+				noteStr = colorRed + result.Info + colorReset
 			}
 		}
 
@@ -131,13 +135,51 @@ func main() {
 			result.Name,
 			statusStr,
 			regionStr,
-			"",
+			noteStr,
 		})
 	}
 
 	table.Render()
 	fmt.Printf("\n总计: %d 个节点, %d 个可解锁 YouTube (%.1f%%)\n",
 		len(results), successCount, float64(successCount)/float64(len(results))*100)
+
+	// 生成失败节点列表文件
+	failedNodes := make([]string, 0)
+	for _, result := range results {
+		if result.Status != "Success" {
+			failedNodes = append(failedNodes, result.Name)
+		}
+	}
+
+	outputFile := "youtube_cn.txt"
+	absPath, _ := filepath.Abs(outputFile)
+
+	if len(failedNodes) > 0 {
+		err := saveFailedNodes(failedNodes, outputFile)
+		if err != nil {
+			fmt.Printf("\n保存失败节点列表出错: %v\n", err)
+		} else {
+			fmt.Printf("\n已将 %d 个失败节点保存到: %s\n", len(failedNodes), absPath)
+		}
+	} else {
+		// 删除旧的失败列表文件，避免过时数据
+		if _, err := os.Stat(outputFile); err == nil {
+			os.Remove(outputFile)
+			fmt.Printf("\n所有节点均可解锁 YouTube，已删除旧的失败列表: %s\n", absPath)
+		} else {
+			fmt.Println("\n所有节点均可解锁 YouTube")
+		}
+	}
+}
+
+// saveFailedNodes 保存失败节点列表到文件
+func saveFailedNodes(nodes []string, filename string) error {
+	var builder strings.Builder
+	for _, node := range nodes {
+		builder.WriteString(node)
+		builder.WriteString("\n")
+	}
+	return os.WriteFile(filename, []byte(builder.String()), 0644)
 }
 
 // createClient 创建一个通过代理的 HTTP 客户端
