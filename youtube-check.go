@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -70,10 +71,11 @@ func main() {
 
 	// 测试结果
 	type Result struct {
-		Name   string
-		Status string
-		Region string
-		Info   string
+		Name        string
+		Status      string
+		Region      string
+		Info        string
+		ExitCountry string
 	}
 
 	results := make([]Result, 0)
@@ -85,11 +87,16 @@ func main() {
 
 		// 测试 YouTube
 		result := unlock.TestYouTube(client)
+
+		// 获取出口国家 (使用更可靠的 API)
+		exitCountry := getExitCountry(client)
+
 		results = append(results, Result{
-			Name:   proxy.Name(),
-			Status: result.Status,
-			Region: result.Region,
-			Info:   result.Info,
+			Name:        proxy.Name(),
+			Status:      result.Status,
+			Region:      result.Region,
+			Info:        result.Info,
+			ExitCountry: exitCountry,
 		})
 
 		bar.Add(1)
@@ -98,7 +105,7 @@ func main() {
 	// 输出结果
 	fmt.Println("\n")
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"节点名称", "YouTube 状态", "区域", "备注"})
+	table.SetHeader([]string{"节点名称", "YouTube 状态", "区域", "出口国家", "备注"})
 	table.SetAutoWrapText(false)
 	table.SetAutoFormatHeaders(true)
 	table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
@@ -115,6 +122,7 @@ func main() {
 	for _, result := range results {
 		statusStr := result.Status
 		regionStr := result.Region
+		exitCountryStr := result.ExitCountry
 		noteStr := ""
 
 		if result.Status == "Success" {
@@ -131,10 +139,16 @@ func main() {
 			}
 		}
 
+		// 出口国家着色
+		if exitCountryStr != "" && exitCountryStr != "N/A" {
+			exitCountryStr = colorYellow + exitCountryStr + colorReset
+		}
+
 		table.Append([]string{
 			result.Name,
 			statusStr,
 			regionStr,
+			exitCountryStr,
 			noteStr,
 		})
 	}
@@ -203,4 +217,32 @@ func createClient(proxy constant.Proxy, timeout time.Duration) *http.Client {
 			},
 		},
 	}
+}
+
+// getExitCountry 获取代理的出口国家
+func getExitCountry(client *http.Client) string {
+	// 使用 ip-api.com (免费、可靠)
+	req, err := http.NewRequest("GET", "http://ip-api.com/json/?fields=countryCode", nil)
+	if err != nil {
+		return "N/A"
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "N/A"
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		CountryCode string `json:"countryCode"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "N/A"
+	}
+
+	if result.CountryCode != "" {
+		return result.CountryCode
+	}
+	return "N/A"
 }
