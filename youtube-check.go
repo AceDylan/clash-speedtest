@@ -34,6 +34,15 @@ const (
 	colorReset  = "\033[0m"
 )
 
+// Result 测试结果结构
+type Result struct {
+	Name        string
+	Status      string
+	Region      string
+	Info        string
+	ExitCountry string
+}
+
 func main() {
 	flag.Parse()
 	log.SetLevel(log.SILENT)
@@ -70,14 +79,6 @@ func main() {
 	fmt.Printf("找到 %d 个节点，开始测试...\n\n", len(proxies))
 
 	// 测试结果
-	type Result struct {
-		Name        string
-		Status      string
-		Region      string
-		Info        string
-		ExitCountry string
-	}
-
 	results := make([]Result, 0)
 	bar := progressbar.Default(int64(len(proxies)), "测试中...")
 
@@ -157,42 +158,178 @@ func main() {
 	fmt.Printf("\n总计: %d 个节点, %d 个可解锁 YouTube (%.1f%%)\n",
 		len(results), successCount, float64(successCount)/float64(len(results))*100)
 
-	// 生成失败节点列表文件
-	failedNodes := make([]string, 0)
-	for _, result := range results {
-		if result.Status != "Success" {
-			failedNodes = append(failedNodes, result.Name)
-		}
-	}
-
+	// 生成有问题的节点列表文件（失败或国家不匹配）
 	outputFile := "youtube_cn.txt"
 	absPath, _ := filepath.Abs(outputFile)
 
-	if len(failedNodes) > 0 {
-		err := saveFailedNodes(failedNodes, outputFile)
+	// 统计有问题的节点数量
+	problematicCount := 0
+	for _, result := range results {
+		if result.Status != "Success" || isCountryMismatch(result.Name, result.ExitCountry) {
+			problematicCount++
+		}
+	}
+
+	if problematicCount > 0 {
+		err := saveProblematicNodes(results, outputFile)
 		if err != nil {
-			fmt.Printf("\n保存失败节点列表出错: %v\n", err)
+			fmt.Printf("\n保存问题节点列表出错: %v\n", err)
 		} else {
-			fmt.Printf("\n已将 %d 个失败节点保存到: %s\n", len(failedNodes), absPath)
+			fmt.Printf("\n已将 %d 个问题节点（失败或国家不匹配）保存到: %s\n", problematicCount, absPath)
 		}
 	} else {
-		// 删除旧的失败列表文件，避免过时数据
+		// 删除旧的列表文件，避免过时数据
 		if _, err := os.Stat(outputFile); err == nil {
 			os.Remove(outputFile)
-			fmt.Printf("\n所有节点均可解锁 YouTube，已删除旧的失败列表: %s\n", absPath)
+			fmt.Printf("\n所有节点均正常（解锁成功且国家匹配），已删除旧的问题列表: %s\n", absPath)
 		} else {
-			fmt.Println("\n所有节点均可解锁 YouTube")
+			fmt.Println("\n所有节点均正常（解锁成功且国家匹配）")
 		}
 	}
 }
 
-// saveFailedNodes 保存失败节点列表到文件
-func saveFailedNodes(nodes []string, filename string) error {
-	var builder strings.Builder
-	for _, node := range nodes {
-		builder.WriteString(node)
-		builder.WriteString("\n")
+// countryNameMap 国家/地区名称到代码的映射
+var countryNameMap = map[string]string{
+	"美国": "US", "美": "US", "US": "US",
+	"香港": "HK", "港": "HK", "HK": "HK",
+	"台湾": "TW", "台": "TW", "TW": "TW",
+	"日本": "JP", "日": "JP", "JP": "JP",
+	"韩国": "KR", "韩": "KR", "KR": "KR",
+	"新加坡": "SG", "狮城": "SG", "新": "SG", "SG": "SG",
+	"英国": "GB", "英": "GB", "UK": "GB", "GB": "GB",
+	"德国": "DE", "德": "DE", "DE": "DE",
+	"法国": "FR", "法": "FR", "FR": "FR",
+	"加拿大": "CA", "加": "CA", "CA": "CA",
+	"澳大利亚": "AU", "澳": "AU", "AU": "AU",
+	"俄罗斯": "RU", "俄": "RU", "RU": "RU",
+	"印度": "IN", "印": "IN", "IN": "IN",
+	"巴西": "BR", "BR": "BR",
+	"阿根廷": "AR", "AR": "AR",
+	"土耳其": "TR", "TR": "TR",
+	"荷兰": "NL", "NL": "NL",
+	"意大利": "IT", "IT": "IT",
+	"西班牙": "ES", "ES": "ES",
+	"瑞士": "CH", "CH": "CH",
+	"瑞典": "SE", "SE": "SE",
+	"波兰": "PL", "PL": "PL",
+	"马来西亚": "MY", "马": "MY", "MY": "MY",
+	"泰国": "TH", "泰": "TH", "TH": "TH",
+	"越南": "VN", "越": "VN", "VN": "VN",
+	"菲律宾": "PH", "菲": "PH", "PH": "PH",
+	"印尼": "ID", "印度尼西亚": "ID", "ID": "ID",
+	"阿联酋": "AE", "迪拜": "AE", "AE": "AE",
+	"南非": "ZA", "ZA": "ZA",
+}
+
+// getExpectedCountryFromName 从节点名称中提取预期的国家代码
+func getExpectedCountryFromName(name string) string {
+	// 只考虑 | 后面的部分，忽略前面的前缀（如 "ALPHA | 香港 01" -> "香港 01"）
+	if idx := strings.Index(name, "|"); idx != -1 {
+		name = name[idx+1:]
 	}
+	name = strings.TrimSpace(name)
+	nameUpper := strings.ToUpper(name)
+
+	// 将 map 的键按长度从长到短排序，避免短代码误匹配
+	// 例如避免 "PH" 匹配到 "ALPHA" 中的 "PH"
+	type keyValue struct {
+		key  string
+		code string
+	}
+	var sortedKeys []keyValue
+	for key, code := range countryNameMap {
+		sortedKeys = append(sortedKeys, keyValue{key, code})
+	}
+
+	// 按键长度从长到短排序
+	for i := 0; i < len(sortedKeys); i++ {
+		for j := i + 1; j < len(sortedKeys); j++ {
+			if len(sortedKeys[i].key) < len(sortedKeys[j].key) {
+				sortedKeys[i], sortedKeys[j] = sortedKeys[j], sortedKeys[i]
+			}
+		}
+	}
+
+	// 按长度顺序检查
+	for _, kv := range sortedKeys {
+		upperKey := strings.ToUpper(kv.key)
+		if strings.Contains(nameUpper, upperKey) {
+			return kv.code
+		}
+	}
+	return ""
+}
+
+// isCountryMismatch 判断节点名称中的国家与出口国家是否不匹配
+func isCountryMismatch(nodeName, exitCountry string) bool {
+	if exitCountry == "" || exitCountry == "N/A" {
+		return false // 无法获取出口国家时不认为是不匹配
+	}
+
+	expectedCountry := getExpectedCountryFromName(nodeName)
+	if expectedCountry == "" {
+		return false // 节点名称中没有明确的国家信息，不认为是不匹配
+	}
+
+	return expectedCountry != exitCountry
+}
+
+// saveProblematicNodes 保存有问题的节点列表到文件（失败或国家不匹配）
+func saveProblematicNodes(results []Result, filename string) error {
+	// 收集有问题的节点
+	type problematicNode struct {
+		result      Result
+		countryCode string
+	}
+
+	var nodes []problematicNode
+	for _, result := range results {
+		// 保存失败的节点或国家不匹配的节点
+		if result.Status != "Success" || isCountryMismatch(result.Name, result.ExitCountry) {
+			countryCode := getExpectedCountryFromName(result.Name)
+			if countryCode == "" {
+				countryCode = "ZZ" // 未知国家放在最后
+			}
+			nodes = append(nodes, problematicNode{result, countryCode})
+		}
+	}
+
+	if len(nodes) == 0 {
+		return nil // 没有问题节点，不写入文件
+	}
+
+	// 按国家代码排序（冒泡排序）
+	for i := 0; i < len(nodes); i++ {
+		for j := i + 1; j < len(nodes); j++ {
+			if nodes[i].countryCode > nodes[j].countryCode {
+				nodes[i], nodes[j] = nodes[j], nodes[i]
+			}
+		}
+	}
+
+	// 写入文件
+	var builder strings.Builder
+	builder.WriteString("节点名称\tYouTube状态\t区域\t出口国家\n")
+
+	for _, node := range nodes {
+		result := node.result
+		status := result.Status
+		if status != "Success" {
+			status = "Failed"
+		}
+		region := result.Region
+		if region == "" {
+			region = "N/A"
+		}
+		exitCountry := result.ExitCountry
+		if exitCountry == "" {
+			exitCountry = "N/A"
+		}
+
+		builder.WriteString(fmt.Sprintf("%s\t%s\t%s\t%s\n",
+			result.Name, status, region, exitCountry))
+	}
+
 	return os.WriteFile(filename, []byte(builder.String()), 0644)
 }
 
