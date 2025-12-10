@@ -1,3 +1,6 @@
 节点名称	YouTube状态	区域	出口国家
+流量光 | 英国 02	Failed	N/A	GB
 ALPHA | 香港 01	Failed	N/A	HK
+STGA | 日本 06	Failed	N/A	JP
+STGA | 日本 05	Failed	N/A	JP
 ALPHA | 韩国 家宽 01	Failed	N/A	KR
