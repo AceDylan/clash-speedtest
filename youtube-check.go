@@ -165,7 +165,16 @@ func main() {
 	// 统计有问题的节点数量
 	problematicCount := 0
 	for _, result := range results {
-		if result.Status != "Success" || isCountryMismatch(result.Name, result.ExitCountry) {
+		// 国家不匹配的节点总是计入
+		if isCountryMismatch(result.Name, result.ExitCountry) {
+			problematicCount++
+			continue
+		}
+		// 解锁失败的节点：只有当出口国家已知时才计入
+		if result.Status != "Success" {
+			if result.ExitCountry == "" || result.ExitCountry == "N/A" {
+				continue // 解锁失败且出口国未知时跳过
+			}
 			problematicCount++
 		}
 	}
@@ -284,8 +293,21 @@ func saveProblematicNodes(results []Result, filename string) error {
 
 	var nodes []problematicNode
 	for _, result := range results {
-		// 保存失败的节点或国家不匹配的节点
-		if result.Status != "Success" || isCountryMismatch(result.Name, result.ExitCountry) {
+		// 保存国家不匹配的节点
+		if isCountryMismatch(result.Name, result.ExitCountry) {
+			countryCode := getExpectedCountryFromName(result.Name)
+			if countryCode == "" {
+				countryCode = "ZZ" // 未知国家放在最后
+			}
+			nodes = append(nodes, problematicNode{result, countryCode})
+			continue
+		}
+
+		// 保存解锁失败但出口国已知的节点；出口国未知时跳过
+		if result.Status != "Success" {
+			if result.ExitCountry == "" || result.ExitCountry == "N/A" {
+				continue // 解锁失败且出口国未知时跳过
+			}
 			countryCode := getExpectedCountryFromName(result.Name)
 			if countryCode == "" {
 				countryCode = "ZZ" // 未知国家放在最后
