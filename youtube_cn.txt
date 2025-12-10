@@ -1,0 +1,13 @@
+节点名称	YouTube状态	区域	出口国家
+MAOSU | 法国 ipv6 中转 0.3× 01	Success	DE	DE
+MAOSU | 法国 IEPL 01	Success	DE	DE
+MAOSU | 法国 中转 CN2 1.5× 01	Success	DE	DE
+MAOSU | 法国 ipv6 中转 01	Success	DE	DE
+MAOSU | 英国 ipv6 中转 03	Failed	N/A	GB
+MAOSU | 香港 直连 中转 01	Failed	N/A	CN
+MAOSU | 美国 IEPL 11	Failed	N/A	US
+MAOSU | 美国 中转 CN2 01	Failed	N/A	US
+MAOSU | 美国 中转 07	Failed	N/A	US
+MAOSU | 美国 IEPL 10	Failed	N/A	US
+MAOSU | 美国 IEPL 01	Failed	N/A	US
+MAOSU | 美国 IEPL 05	Failed	N/A	US
