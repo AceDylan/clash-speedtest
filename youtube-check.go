@@ -23,7 +23,7 @@ import (
 
 var (
 	configPath  = flag.String("c", "", "配置文件路径，支持 http(s) 链接")
-	filterRegex = flag.String("f", ".+", "使用正则表达式过滤节点名称")
+	filterRegex = flag.String("f", "(?i)(香港|港|HK|日本|JP|美国|US|新加坡|狮城|SG)", "使用正则表达式过滤节点名称")
 	timeout     = flag.Duration("timeout", time.Second*10, "测试超时时间")
 )
 
@@ -162,15 +162,9 @@ func main() {
 	outputFile := "youtube_cn.txt"
 	absPath, _ := filepath.Abs(outputFile)
 
-	// 统计有问题的节点数量
+	// 统计有问题的节点数量（仅解锁失败且出口国已知的节点）
 	problematicCount := 0
 	for _, result := range results {
-		// 国家不匹配的节点总是计入
-		if isCountryMismatch(result.Name, result.ExitCountry) {
-			problematicCount++
-			continue
-		}
-		// 解锁失败的节点：只有当出口国家已知时才计入
 		if result.Status != "Success" {
 			if result.ExitCountry == "" || result.ExitCountry == "N/A" {
 				continue // 解锁失败且出口国未知时跳过
@@ -184,15 +178,15 @@ func main() {
 		if err != nil {
 			fmt.Printf("\n保存问题节点列表出错: %v\n", err)
 		} else {
-			fmt.Printf("\n已将 %d 个问题节点（失败或国家不匹配）保存到: %s\n", problematicCount, absPath)
+			fmt.Printf("\n已将 %d 个解锁失败节点保存到: %s\n", problematicCount, absPath)
 		}
 	} else {
 		// 删除旧的列表文件，避免过时数据
 		if _, err := os.Stat(outputFile); err == nil {
 			os.Remove(outputFile)
-			fmt.Printf("\n所有节点均正常（解锁成功且国家匹配），已删除旧的问题列表: %s\n", absPath)
+			fmt.Printf("\n所有节点均解锁成功，已删除旧的问题列表: %s\n", absPath)
 		} else {
-			fmt.Println("\n所有节点均正常（解锁成功且国家匹配）")
+			fmt.Println("\n所有节点均解锁成功")
 		}
 	}
 }
@@ -283,9 +277,9 @@ func isCountryMismatch(nodeName, exitCountry string) bool {
 	return expectedCountry != exitCountry
 }
 
-// saveProblematicNodes 保存有问题的节点列表到文件（失败或国家不匹配）
+// saveProblematicNodes 保存解锁失败的节点列表到文件
 func saveProblematicNodes(results []Result, filename string) error {
-	// 收集有问题的节点
+	// 收集解锁失败的节点
 	type problematicNode struct {
 		result      Result
 		countryCode string
@@ -293,20 +287,10 @@ func saveProblematicNodes(results []Result, filename string) error {
 
 	var nodes []problematicNode
 	for _, result := range results {
-		// 保存国家不匹配的节点
-		if isCountryMismatch(result.Name, result.ExitCountry) {
-			countryCode := getExpectedCountryFromName(result.Name)
-			if countryCode == "" {
-				countryCode = "ZZ" // 未知国家放在最后
-			}
-			nodes = append(nodes, problematicNode{result, countryCode})
-			continue
-		}
-
-		// 保存解锁失败但出口国已知的节点；出口国未知时跳过
+		// 仅保存解锁失败且出口国已知的节点
 		if result.Status != "Success" {
 			if result.ExitCountry == "" || result.ExitCountry == "N/A" {
-				continue // 解锁失败且出口国未知时跳过
+				continue
 			}
 			countryCode := getExpectedCountryFromName(result.Name)
 			if countryCode == "" {
