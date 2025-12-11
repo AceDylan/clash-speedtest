@@ -1,2 +1,10 @@
 节点名称	YouTube状态	区域	出口国家
 ALPHA | 香港 01	Failed	N/A	HK
+STGA | 日本 06	Failed	N/A	JP
+STGA | 日本 05	Failed	N/A	JP
+MAOSU | 美国 IEPL 05	Failed	N/A	US
+MAOSU | 美国 IEPL 11	Failed	N/A	US
+MAOSU | 美国 IEPL 10	Failed	N/A	US
+MAOSU | 美国 IEPL 01	Failed	N/A	US
+MAOSU | 美国 中转 07	Failed	N/A	US
+MAOSU | 美国 中转 CN2 01	Failed	N/A	US
