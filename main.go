@@ -39,6 +39,7 @@ var (
 	enableRisk        = flag.Bool("risk", false, "启用解锁测试时的 IP 风险检测(仅在-unlock模式下有效)")
 	htmlReport        = flag.String("html", "", "输出 HTML 报告的路径+名称(默认5秒自动刷新，支持手动刷新)")
 	fastMode          = flag.Bool("fast", false, "快速测试模式，仅测试节点延迟")
+	txtOutput         = flag.String("txt", "", "输出纯文本结果的路径+名称(格式：节点名称 延迟 下载速度)")
 )
 
 const (
@@ -110,6 +111,14 @@ func main() {
 			log.Fatalln("save config file failed: %v", err)
 		}
 		fmt.Printf("\nsave config file to: %s\n", *outputPath)
+	}
+
+	if *txtOutput != "" {
+		err = saveTxtResult(results)
+		if err != nil {
+			log.Fatalln("save txt file failed: %v", err)
+		}
+		fmt.Printf("\nsave txt file to: %s\n", *txtOutput)
 	}
 
 	if *htmlReport != "" {
@@ -480,4 +489,21 @@ func saveConfig(results []*speedtester.Result) error {
 	}
 
 	return os.WriteFile(*outputPath, yamlData, 0o644)
+}
+
+func saveTxtResult(results []*speedtester.Result) error {
+	var lines []string
+	for _, result := range results {
+		if result.Latency <= 0 {
+			continue
+		}
+		line := fmt.Sprintf("%s\t%s\t%s",
+			result.ProxyName,
+			result.FormatLatency(),
+			result.FormatDownloadSpeed(),
+		)
+		lines = append(lines, line)
+	}
+	content := strings.Join(lines, "\n")
+	return os.WriteFile(*txtOutput, []byte(content), 0o644)
 }
