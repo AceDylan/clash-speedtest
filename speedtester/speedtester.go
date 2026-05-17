@@ -75,6 +75,10 @@ type RawConfig struct {
 	Proxies   []map[string]any          `yaml:"proxies"`
 }
 
+func isUnsupportedProxyTypeError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "unsupport proxy type:")
+}
+
 func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 	allProxies := make(map[string]*CProxy)
 	st.blockedNodes = make([]string, 0)
@@ -112,6 +116,10 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 		for i, config := range proxiesConfig {
 			proxy, err := adapter.ParseProxy(config)
 			if err != nil {
+				if isUnsupportedProxyTypeError(err) {
+					log.Warnln("skip unsupported proxy %d: %s", i, err)
+					continue
+				}
 				return nil, fmt.Errorf("proxy %d: %w", i, err)
 			}
 
@@ -124,7 +132,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			if name == provider.ReservedName {
 				return nil, fmt.Errorf("can not defined a provider called `%s`", provider.ReservedName)
 			}
-			pd, err := provider.ParseProxyProvider(name, config)
+			pd, err := provider.ParseProxyProvider(name, config, nil)
 			if err != nil {
 				return nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
 			}
@@ -142,7 +150,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			switch p.Type() {
 			case constant.Shadowsocks, constant.ShadowsocksR, constant.Snell, constant.Socks5, constant.Http,
 				constant.Vmess, constant.Vless, constant.Trojan, constant.Hysteria, constant.Hysteria2,
-				constant.WireGuard, constant.Tuic, constant.Ssh:
+				constant.WireGuard, constant.Tuic, constant.Ssh, constant.AnyTLS:
 			default:
 				continue
 			}
